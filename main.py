@@ -49,13 +49,59 @@ REPLY = (
     "firm no."
 )
 
-OUTPUT_DIR = os.environ.get("MAKEFUN_OUTPUT_DIR", "/output")
+# Bounty gate: entry.txt must be UTF-8 text of 1-140 characters, not
+# whitespace-only, and a single line.
+MIN_LENGTH = 1
+MAX_LENGTH = 140
+
+
+def validate_reply(reply: str) -> str:
+    """Harden the reply against every way the bounty gate can fail.
+
+    Returns the reply unchanged when it passes, so the written bytes
+    are exactly the reviewed line. Raises ValueError naming the
+    broken rule otherwise -- never silently truncates or rewrites,
+    because a "fixed" line would no longer be the judged joke.
+    """
+    if not isinstance(reply, str):
+        raise ValueError(f"reply must be str, got {type(reply).__name__}")
+    if len(reply) < MIN_LENGTH:
+        raise ValueError("reply is empty")
+    if len(reply) > MAX_LENGTH:
+        raise ValueError(
+            f"reply is {len(reply)} characters, over the {MAX_LENGTH} limit"
+        )
+    if not reply.strip():
+        raise ValueError("reply is whitespace-only")
+    if "\n" in reply or "\r" in reply:
+        raise ValueError("reply must be a single line")
+    # Prove it round-trips as UTF-8 before anything is written.
+    reply.encode("utf-8")
+    return reply
+
+
+def resolve_output_dir() -> Path:
+    """Resolve the output directory, refusing an empty override."""
+    raw = os.environ.get("MAKEFUN_OUTPUT_DIR", "/output")
+    if not raw.strip():
+        raise ValueError("MAKEFUN_OUTPUT_DIR must not be empty")
+    return Path(raw)
+
+
+def write_entry(reply: str, output_dir: Path) -> Path:
+    """Validate, write, then verify the file holds exactly the reply."""
+    checked = validate_reply(reply)
+    out = output_dir / "entry.txt"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(checked, encoding="utf-8")
+    if out.read_text(encoding="utf-8") != checked:
+        raise ValueError("entry.txt does not match the validated reply")
+    return out
 
 
 def main() -> None:
-    out = Path(OUTPUT_DIR) / "entry.txt"
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(REPLY, encoding="utf-8")
+    out = write_entry(REPLY, resolve_output_dir())
+    print(f"wrote {out} ({len(REPLY)} characters)")
 
 
 if __name__ == "__main__":
