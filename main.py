@@ -75,6 +75,10 @@ def validate_reply(reply: str) -> str:
         raise ValueError("reply is whitespace-only")
     if "\n" in reply or "\r" in reply:
         raise ValueError("reply must be a single line")
+    if any(ord(ch) < 0x20 and ch not in ("\t",) for ch in reply):
+        raise ValueError("reply must not contain control characters")
+    if "\t" in reply:
+        raise ValueError("reply must not contain tab characters")
     # Prove it round-trips as UTF-8 before anything is written.
     reply.encode("utf-8")
     return reply
